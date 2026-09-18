@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Autonomous Coding Studio"
+description = "A mobile-first AI coding workspace with a public homepage and a chat-driven studio for planning tasks, editing project files, running commands, and previewing app changes without authentication."
+version = "1.0.0"
+id = "artifacts/autonomous-coding-studio"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22183
+
+[services.development]
+run = "pnpm --filter @workspace/autonomous-coding-studio run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/autonomous-coding-studio", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/autonomous-coding-studio/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22183"
+BASE_PATH = "/"
