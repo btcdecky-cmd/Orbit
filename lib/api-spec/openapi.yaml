@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: agent
+    description: Coding workspace and agent operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /agent/workspace:
+    get:
+      operationId: getAgentWorkspace
+      tags: [agent]
+      summary: Read the active coding workspace
+      responses:
+        "200":
+          description: Workspace files and metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWorkspace"
+        "500":
+          description: Workspace unavailable
+  /agent/run:
+    post:
+      operationId: runAgentTask
+      tags: [agent]
+      summary: Ask the coding agent to modify the workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentTaskInput"
+      responses:
+        "200":
+          description: Agent result with applied changes and command output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTaskResult"
+        "400":
+          description: Invalid task
+        "503":
+          description: Agent provider is not configured
 components:
   schemas:
     HealthStatus:
@@ -33,4 +71,68 @@ components:
           type: string
       required:
         - status
+    AgentWorkspaceFile:
+      type: object
+      properties:
+        path:
+          type: string
+        kind:
+          type: string
+          enum: [file, folder]
+        language:
+          type: ["string", "null"]
+        size:
+          type: integer
+      required: [path, kind, language, size]
+    AgentWorkspace:
+      type: object
+      properties:
+        projectName:
+          type: string
+        branch:
+          type: string
+        status:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentWorkspaceFile"
+        contents:
+          type: object
+          additionalProperties:
+            type: string
+      required: [projectName, branch, status, files, contents]
+    AgentTaskInput:
+      type: object
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+      required: [prompt]
+    AgentChange:
+      type: object
+      properties:
+        path:
+          type: string
+        summary:
+          type: string
+      required: [path, summary]
+    AgentTaskResult:
+      type: object
+      properties:
+        message:
+          type: string
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentChange"
+        commands:
+          type: array
+          items:
+            type: string
+        output:
+          type: string
+        workspace:
+          $ref: "#/components/schemas/AgentWorkspace"
+      required: [message, changes, commands, output, workspace]
 

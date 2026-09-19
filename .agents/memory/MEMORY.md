@@ -1,0 +1,1 @@
+- [Groq model availability](groq-model-availability.md) — validate the live model list because access varies by key.

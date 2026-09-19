@@ -1,0 +1,7 @@
+{
+  "name": "orbit-workspace",
+  "private": true,
+  "scripts": {
+    "build": "echo \"Connect this workspace to your app build command\""
+  }
+}
