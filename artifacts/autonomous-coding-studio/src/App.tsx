@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import {
   QueryClient,
   QueryClientProvider,
@@ -6,7 +6,9 @@ import {
 } from '@tanstack/react-query';
 import {
   getGetAgentWorkspaceQueryKey,
+  type AgentTaskResult,
   useGetAgentWorkspace,
+  useUpdateAgentFile,
   useRunAgentTask,
 } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -223,7 +225,7 @@ function StudioHeader({ projectName, branch, onToggleFiles, previewVisible, onTo
   );
 }
 
-function FileExplorer({ files, selectedFile, onSelect, open, onClose }: { files: WorkspaceFile[]; selectedFile: string; onSelect: (path: string) => void; open: boolean; onClose: () => void }) {
+function FileExplorer({ files, selectedFile, onSelect, onNewFile, open, onClose }: { files: WorkspaceFile[]; selectedFile: string; onSelect: (path: string) => void; onNewFile: () => void; open: boolean; onClose: () => void }) {
   return (
     <aside className={`${open ? 'fixed inset-x-3 top-[72px] z-30 block shadow-2xl' : 'hidden'} max-h-[calc(100dvh-88px)] overflow-auto rounded-xl border border-[hsl(225_23%_26%)] bg-[hsl(226_29%_18%)] lg:relative lg:inset-auto lg:top-auto lg:z-auto lg:block lg:max-h-none lg:rounded-none lg:border-0 lg:border-r lg:shadow-none w-auto shrink-0 text-white/70 lg:w-60`} data-testid="file-explorer">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-4"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.16em] text-white/45"><PanelLeft className="h-3.5 w-3.5" /> Explorer</div><button className="rounded p-1 text-white/45 hover:bg-white/10 hover:text-white lg:hidden" onClick={onClose} data-testid="button-close-files"><X className="h-4 w-4" /></button></div>
@@ -235,19 +237,26 @@ function FileExplorer({ files, selectedFile, onSelect, open, onClose }: { files:
            return <button key={file.path} onClick={() => { if (file.kind !== 'folder') onSelect(file.path); }} className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition-colors ${nested ? 'pl-7' : ''} ${selectedFile === file.path ? 'bg-[hsl(166_78%_45%_/_0.13)] text-[hsl(166_78%_60%)]' : 'text-white/55 hover:bg-white/[.06] hover:text-white/85'}`} data-testid={`button-file-${label.replace('.', '-')}`}>{file.kind === 'folder' ? <ChevronDown className="h-3.5 w-3.5 text-white/35" /> : <span className="w-3.5" />}{fileIcon(file.kind)}<span className="truncate">{label}</span>{selectedFile === file.path && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[hsl(166_78%_45%)]" />}</button>;
          })}
       </div>
-      <div className="border-t border-white/10 px-4 py-4"><button className="flex w-full items-center gap-2 text-xs text-white/45 transition-colors hover:text-white" data-testid="button-add-file"><Plus className="h-4 w-4" /> New file</button></div>
+       <div className="border-t border-white/10 px-4 py-4"><button onClick={onNewFile} className="flex w-full items-center gap-2 text-xs text-white/45 transition-colors hover:text-white" data-testid="button-add-file"><Plus className="h-4 w-4" /> New file</button></div>
     </aside>
   );
 }
 
-function CodeEditor({ selectedFile, content, loading }: { selectedFile: string; content: string; loading?: boolean }) {
-  const lines = useMemo(() => content.split('\n'), [content]);
+function CodeEditor({ selectedFile, content, loading, saving, onSave }: { selectedFile: string; content: string; loading?: boolean; saving?: boolean; onSave: (content: string) => void }) {
+  const [draft, setDraft] = useState(content);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDraft(content);
+    setDirty(false);
+  }, [content, selectedFile]);
+
   return (
     <div className="flex min-h-[390px] flex-1 flex-col overflow-hidden bg-[hsl(228_31%_14%)] text-[12px] sm:min-h-[480px]" data-testid="code-editor">
-       <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5"><div className="flex items-center gap-2 text-xs text-white/60">{fileIcon(selectedFile.endsWith('.json') ? 'json' : 'tsx')}<span>{selectedFile ? selectedFile.split('/').pop() : 'Loading workspace'}</span><span className="text-white/25">·</span><span className="font-mono text-[10px] text-white/35">{loading ? 'loading workspace' : 'synced from workspace'}</span></div><div className="flex items-center gap-1 text-[10px] text-white/35"><Braces className="h-3.5 w-3.5" /> {selectedFile.endsWith('.json') ? 'JSON' : 'TypeScript'}</div></div>
-      <div className="scrollbar-thin code-surface flex-1 overflow-auto px-3 py-4 sm:px-0">
-        {lines.map((line, index) => <div className="code-line flex" key={`${selectedFile}-${index}`}><span className="w-9 shrink-0 select-none pr-3 text-right text-[10px] leading-[1.45rem] text-white/20 sm:w-14 sm:pr-5">{index + 1}</span><code className={`leading-[1.45rem] ${line.includes('export') || line.includes('import') ? 'text-[hsl(221_74%_72%)]' : line.includes('className') ? 'text-[hsl(35_97%_72%)]' : line.includes('//') ? 'text-white/30' : 'text-white/70'}`}>{line || ' '}</code></div>)}
-      </div>
+       <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5"><div className="flex items-center gap-2 text-xs text-white/60">{fileIcon(selectedFile.endsWith('.json') ? 'json' : 'tsx')}<span>{selectedFile ? selectedFile.split('/').pop() : 'Loading workspace'}</span><span className="text-white/25">·</span><span className="font-mono text-[10px] text-white/35">{loading ? 'loading workspace' : dirty ? 'unsaved changes' : 'synced from workspace'}</span></div><div className="flex items-center gap-3 text-[10px] text-white/35"><span className="flex items-center gap-1"><Braces className="h-3.5 w-3.5" /> {selectedFile.endsWith('.json') ? 'JSON' : selectedFile.endsWith('.css') ? 'CSS' : 'Code'}</span><button onClick={() => onSave(draft)} disabled={!dirty || saving || !selectedFile} className="rounded-md bg-[hsl(166_78%_45%)] px-2.5 py-1.5 font-semibold text-[hsl(228_31%_14%)] disabled:cursor-not-allowed disabled:opacity-35">{saving ? 'Saving…' : 'Save'}</button></div></div>
+       <div className="code-surface flex-1 overflow-auto">
+         <textarea value={draft} onChange={(event) => { setDraft(event.target.value); setDirty(true); }} disabled={loading || !selectedFile} spellCheck={false} className="min-h-full w-full resize-none bg-transparent p-4 font-mono text-[12px] leading-[1.45rem] text-white/75 outline-none sm:p-6" aria-label={`Edit ${selectedFile || 'workspace file'}`} />
+       </div>
     </div>
   );
 }
@@ -265,7 +274,7 @@ function ActivityPanel({ running, fileCount }: { running: boolean; fileCount: nu
 
 type AgentMessage = { role: 'agent' | 'user'; text: string; meta: string };
 
-function AgentPanel({ initialPrompt, onWorkspaceUpdate }: { initialPrompt: string; onWorkspaceUpdate: (workspace: WorkspaceSnapshot) => void }) {
+function AgentPanel({ initialPrompt, onTaskComplete, onBusyChange }: { initialPrompt: string; onTaskComplete: (result: AgentTaskResult) => void; onBusyChange: (busy: boolean) => void }) {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [draft, setDraft] = useState(initialPrompt);
@@ -273,11 +282,13 @@ function AgentPanel({ initialPrompt, onWorkspaceUpdate }: { initialPrompt: strin
     mutation: {
       onSuccess: (result) => {
         setMessages((current) => [...current, { role: 'agent', text: result.message, meta: 'Orbit · just now' }, ...(result.output ? [{ role: 'agent' as const, text: result.output, meta: 'Command output · just now' }] : [])]);
-        onWorkspaceUpdate(result.workspace);
+        onTaskComplete(result);
+        onBusyChange(false);
         queryClient.setQueryData(getGetAgentWorkspaceQueryKey(), result.workspace);
       },
       onError: (error) => {
         setMessages((current) => [...current, { role: 'agent', text: error instanceof Error ? error.message : 'The agent request failed.', meta: 'Orbit · error' }]);
+        onBusyChange(false);
       },
     },
   });
@@ -287,6 +298,7 @@ function AgentPanel({ initialPrompt, onWorkspaceUpdate }: { initialPrompt: strin
     const prompt = draft.trim();
     setMessages((current) => [...current, { role: 'user', text: prompt, meta: 'You · just now' }]);
     setDraft('');
+    onBusyChange(true);
     mutation.mutate({ data: { prompt } });
   };
   return (
@@ -301,22 +313,17 @@ function AgentPanel({ initialPrompt, onWorkspaceUpdate }: { initialPrompt: strin
   );
 }
 
-function PreviewPane({ workspace }: { workspace?: WorkspaceSnapshot }) {
-  const fileCount = workspace?.files.filter((file) => file.kind === 'file').length ?? 0;
-  const readme = workspace?.contents['README.md'] ?? 'The workspace is loading.';
+function PreviewPane({ previewNonce }: { previewNonce: number }) {
+  const previewUrl = `/api/agent/preview/?v=${previewNonce}`;
   return (
     <div className="border-t border-[hsl(220_21%_88%)] bg-[hsl(222_34%_97%)] p-3 sm:p-5" data-testid="preview-pane">
       <div className="overflow-hidden rounded-xl border border-[hsl(220_21%_88%)] bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-[hsl(220_21%_92%)] bg-[hsl(222_34%_97%)] px-3 py-2">
           <div className="flex gap-1"><span className="h-2 w-2 rounded-full bg-[hsl(3_73%_52%_/_0.6)]" /><span className="h-2 w-2 rounded-full bg-[hsl(35_97%_61%_/_0.7)]" /><span className="h-2 w-2 rounded-full bg-[hsl(166_78%_36%_/_0.6)]" /></div>
-          <div className="mx-auto flex items-center gap-2 rounded bg-white px-3 py-1 font-mono text-[9px] text-[hsl(220_12%_55%)] shadow-sm"><span>workspace://orbit</span><ExternalLink className="h-3 w-3" /></div>
-          <MoreHorizontal className="h-4 w-4 text-[hsl(220_12%_55%)]" />
+          <a href={previewUrl} target="_blank" rel="noreferrer" className="mx-auto flex items-center gap-2 rounded bg-white px-3 py-1 font-mono text-[9px] text-[hsl(220_12%_55%)] shadow-sm"><span>workspace://orbit</span><ExternalLink className="h-3 w-3" /></a>
+          <span className="flex items-center gap-1.5 text-[9px] font-semibold text-[hsl(166_78%_36%)]"><span className="h-1.5 w-1.5 rounded-full bg-[hsl(166_78%_36%)]" /> live</span>
         </div>
-        <div className="min-h-[180px] p-5 sm:min-h-[210px] sm:p-7">
-          <div className="flex items-start justify-between gap-5"><div><p className="text-[9px] font-semibold uppercase tracking-[.16em] text-[hsl(220_12%_55%)]">Persistent project</p><h3 className="mt-2 font-[family-name:var(--app-font-serif)] text-xl font-bold tracking-[-.04em] text-[hsl(225_28%_16%)] sm:text-2xl">{workspace?.projectName ?? 'Connecting to workspace'}</h3></div><div className="rounded-lg bg-[hsl(166_78%_36%)] px-3 py-2 text-[10px] font-semibold text-white">{fileCount} files</div></div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-[hsl(220_21%_88%)] p-3"><p className="text-[9px] text-[hsl(220_12%_55%)]">Branch</p><p className="mt-2 text-sm font-bold text-[hsl(225_28%_16%)]">{workspace?.branch ?? '—'}</p></div><div className="rounded-lg border border-[hsl(220_21%_88%)] p-3"><p className="text-[9px] text-[hsl(220_12%_55%)]">Status</p><p className="mt-2 text-sm font-bold text-[hsl(166_78%_36%)]">{workspace?.status ?? 'connecting'}</p></div></div>
-          <pre className="mt-4 max-h-16 overflow-auto whitespace-pre-wrap rounded-lg bg-[hsl(228_31%_14%)] p-3 font-mono text-[10px] leading-5 text-white/60">{readme}</pre>
-        </div>
+        <iframe key={previewNonce} src={previewUrl} title="Live workspace preview" className="h-[300px] w-full border-0 bg-white sm:h-[360px]" />
       </div>
     </div>
   );
@@ -324,22 +331,48 @@ function PreviewPane({ workspace }: { workspace?: WorkspaceSnapshot }) {
 
 function Studio() {
   const workspaceQuery = useGetAgentWorkspace();
+  const queryClient = useQueryClient();
   const [liveWorkspace, setLiveWorkspace] = useState<WorkspaceSnapshot>();
   const [selectedFile, setSelectedFile] = useState('src/App.tsx');
   const [activeTab, setActiveTab] = useState<'editor' | 'activity' | 'terminal' | 'problems'>('editor');
   const [filesOpen, setFilesOpen] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(true);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [terminalOutput, setTerminalOutput] = useState('No commands have run yet.');
+  const [terminalCommands, setTerminalCommands] = useState<string[]>([]);
+  const [previewNonce, setPreviewNonce] = useState(0);
   const workspace = liveWorkspace ?? workspaceQuery.data;
   const contents = workspace?.contents ?? {};
   const activeFile = contents[selectedFile] ? selectedFile : Object.keys(contents)[0] ?? '';
   const prompt = new URLSearchParams(window.location.search).get('prompt') ?? '';
+  const fileMutation = useUpdateAgentFile({
+    mutation: {
+      onSuccess: (nextWorkspace) => {
+        setLiveWorkspace(nextWorkspace);
+        queryClient.setQueryData(getGetAgentWorkspaceQueryKey(), nextWorkspace);
+        setPreviewNonce((value) => value + 1);
+      },
+    },
+  });
+  const handleAgentResult = (result: AgentTaskResult) => {
+    setLiveWorkspace(result.workspace);
+    setTerminalOutput(result.output || 'The agent did not run a command.');
+    setTerminalCommands(result.commands);
+    setPreviewNonce((value) => value + 1);
+  };
+  const handleNewFile = () => {
+    const path = window.prompt('New file path, for example src/components/Card.tsx');
+    if (!path?.trim()) return;
+    setSelectedFile(path.trim());
+    fileMutation.mutate({ data: { path: path.trim(), content: '' } });
+  };
   const tabs = [{ id: 'editor', label: 'Editor', icon: Code2 }, { id: 'activity', label: 'Activity', icon: Layers3 }, { id: 'terminal', label: 'Terminal', icon: SquareTerminal }, { id: 'problems', label: 'Problems', icon: TriangleAlert }];
   return (
     <div className="orbit-noise flex min-h-[100dvh] flex-col bg-[hsl(228_31%_14%)] text-white">
       <StudioHeader projectName={workspace?.projectName ?? 'orbit-workspace'} branch={workspace?.branch ?? 'main'} onToggleFiles={() => setFilesOpen((value) => !value)} previewVisible={previewVisible} onTogglePreview={() => setPreviewVisible((value) => !value)} />
       {workspaceQuery.error && <div className="border-b border-[hsl(3_73%_52%_/_0.35)] bg-[hsl(3_73%_52%_/_0.1)] px-4 py-2 text-xs text-[hsl(3_73%_72%)]">Workspace API unavailable: {workspaceQuery.error instanceof Error ? workspaceQuery.error.message : 'Could not load the project workspace.'}</div>}
       <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
-        <FileExplorer files={workspace?.files ?? []} selectedFile={activeFile} onSelect={(path) => { setSelectedFile(path); setFilesOpen(false); }} open={filesOpen} onClose={() => setFilesOpen(false)} />
+        <FileExplorer files={workspace?.files ?? []} selectedFile={activeFile} onSelect={(path) => { setSelectedFile(path); setFilesOpen(false); }} onNewFile={handleNewFile} open={filesOpen} onClose={() => setFilesOpen(false)} />
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-[hsl(226_29%_18%)] px-3 py-2 lg:hidden">
             {tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.id} onClick={() => setActiveTab(tab.id as typeof activeTab)} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium ${activeTab === tab.id ? 'bg-white/10 text-white' : 'text-white/40'}`} data-testid={`button-tab-${tab.id}`}><Icon className="h-3.5 w-3.5" /> {tab.label}{tab.id === 'problems' && <span className="rounded bg-[hsl(3_73%_52%_/_0.18)] px-1 text-[9px] text-[hsl(3_73%_70%)]">0</span>}</button>; })}
@@ -347,17 +380,17 @@ function Studio() {
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="hidden shrink-0 items-center justify-between border-b border-white/10 bg-[hsl(226_29%_18%)] px-4 lg:flex"><div className="flex">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.id} onClick={() => setActiveTab(tab.id as typeof activeTab)} className={`flex items-center gap-2 border-b-2 px-4 py-3 text-[11px] font-medium ${activeTab === tab.id ? 'border-[hsl(166_78%_45%)] text-white' : 'border-transparent text-white/35 hover:text-white/65'}`} data-testid={`button-desktop-tab-${tab.id}`}><Icon className="h-3.5 w-3.5" /> {tab.label}{tab.id === 'problems' && <span className="font-mono text-[9px] text-white/30">0</span>}</button>; })}</div><button className="text-white/35 hover:text-white" data-testid="button-editor-options"><MoreHorizontal className="h-4 w-4" /></button></div>
-               {activeTab === 'editor' && <CodeEditor selectedFile={activeFile} content={contents[activeFile] ?? '// Loading the persistent workspace...'} loading={workspaceQuery.isLoading} />}
-               {activeTab === 'activity' && <div className="flex min-h-[390px] flex-1 flex-col bg-[hsl(228_31%_14%)] p-5 sm:p-8"><ActivityPanel running={false} fileCount={workspace?.files.filter((file) => file.kind === 'file').length ?? 0} /></div>}
-               {activeTab === 'terminal' && <div className="code-surface min-h-[390px] flex-1 bg-[hsl(228_31%_14%)] p-5 text-xs leading-7 text-white/55"><p><span className="text-[hsl(166_78%_60%)]">orbit</span> <span className="text-white/25">~</span> workspace</p><p className="text-white/35">Commands run by Orbit will appear here after you send a request.</p><p className="mt-3"><span className="text-[hsl(166_78%_60%)]">orbit</span> <span className="text-white/25">~</span> <span className="animate-pulse">▋</span></p></div>}
+               {activeTab === 'editor' && <CodeEditor selectedFile={activeFile} content={contents[activeFile] ?? '// Loading the persistent workspace...'} loading={workspaceQuery.isLoading} saving={fileMutation.isPending} onSave={(content) => fileMutation.mutate({ data: { path: activeFile, content } })} />}
+               {activeTab === 'activity' && <div className="flex min-h-[390px] flex-1 flex-col bg-[hsl(228_31%_14%)] p-5 sm:p-8"><ActivityPanel running={agentRunning || fileMutation.isPending} fileCount={workspace?.files.filter((file) => file.kind === 'file').length ?? 0} /></div>}
+               {activeTab === 'terminal' && <div className="code-surface min-h-[390px] flex-1 overflow-auto bg-[hsl(228_31%_14%)] p-5 text-xs leading-7 text-white/55"><p><span className="text-[hsl(166_78%_60%)]">orbit</span> <span className="text-white/25">~</span> workspace</p>{terminalCommands.length > 0 && terminalCommands.map((command) => <p key={command} className="text-[hsl(166_78%_60%)]">$ {command}</p>)}<pre className="mt-3 whitespace-pre-wrap font-mono text-white/45">{terminalOutput}</pre><p className="mt-3"><span className="text-[hsl(166_78%_60%)]">orbit</span> <span className="text-white/25">~</span> <span className="animate-pulse">▋</span></p></div>}
               {activeTab === 'problems' && <div className="flex min-h-[390px] flex-1 flex-col items-center justify-center bg-[hsl(228_31%_14%)] p-6 text-center"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[hsl(166_78%_45%_/_0.12)] text-[hsl(166_78%_60%)]"><Check className="h-6 w-6" /></div><h3 className="mt-4 text-sm font-semibold text-white">No problems found</h3><p className="mt-1 max-w-xs text-xs leading-5 text-white/35">Orbit will surface type errors, failed checks, and anything worth your attention here.</p></div>}
-               {activeTab === 'editor' && <ActivityPanel running={false} fileCount={workspace?.files.filter((file) => file.kind === 'file').length ?? 0} />}
+                {activeTab === 'editor' && <ActivityPanel running={agentRunning || fileMutation.isPending} fileCount={workspace?.files.filter((file) => file.kind === 'file').length ?? 0} />}
             </div>
-             <AgentPanel initialPrompt={prompt} onWorkspaceUpdate={(nextWorkspace) => setLiveWorkspace(nextWorkspace)} />
+             <AgentPanel initialPrompt={prompt} onTaskComplete={handleAgentResult} onBusyChange={setAgentRunning} />
           </div>
         </main>
       </div>
-       {previewVisible && <PreviewPane workspace={workspace} />}
+       {previewVisible && <PreviewPane previewNonce={previewNonce} />}
        <div className="flex h-8 shrink-0 items-center justify-between border-t border-white/10 bg-[hsl(229_35%_10%)] px-4 font-mono text-[9px] text-white/35 sm:px-6"><div className="flex items-center gap-4"><span className="flex items-center gap-1.5 text-[hsl(166_78%_60%)]"><GitBranch className="h-3 w-3" /> {workspace?.branch ?? 'main'}</span><span className="hidden sm:inline">{workspace?.files.filter((file) => file.kind === 'file').length ?? 0} files</span><span className="hidden sm:inline">workspace synced</span></div><span className="flex items-center gap-1.5"><Monitor className="h-3 w-3" /> {workspace?.status ?? 'connecting'}</span></div>
     </div>
   );

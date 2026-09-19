@@ -25,9 +25,13 @@ export type WorkspaceChange = {
   content: string;
 };
 
-const workspaceRoot = path.resolve(
-  process.env.ORBIT_WORKSPACE_ROOT ??
-    path.join(process.cwd(), "artifacts/autonomous-coding-studio/workspace"),
+const defaultWorkspaceRoot =
+  path.basename(process.cwd()) === "api-server"
+    ? path.resolve(process.cwd(), "../autonomous-coding-studio/workspace")
+    : path.resolve(process.cwd(), "artifacts/autonomous-coding-studio/workspace");
+
+export const workspaceRoot = path.resolve(
+  process.env.ORBIT_WORKSPACE_ROOT ?? defaultWorkspaceRoot,
 );
 
 const initialFiles: Record<string, string> = {
@@ -110,6 +114,74 @@ This project is managed by Orbit, an autonomous coding agent.
 
 Describe a change in the studio and Orbit will inspect this workspace, edit files, run safe validation commands, and report the result.
 `,
+  "index.html": `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbit workspace preview</title>
+    <link rel="stylesheet" href="/api/agent/preview/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/api/agent/preview/src/app.js"></script>
+  </body>
+</html>
+`,
+  "src/app.js": `const root = document.querySelector("#app");
+
+root.innerHTML = \`
+  <main class="preview-shell">
+    <nav class="preview-nav">
+      <strong>orbit</strong>
+      <span class="preview-pill">workspace preview</span>
+    </nav>
+    <section class="preview-hero">
+      <p class="eyebrow">Persistent project</p>
+      <h1>Build something worth shipping.</h1>
+      <p class="lede">This page is served directly from the workspace files Orbit edits.</p>
+      <div class="preview-actions">
+        <button id="primary-action">Explore workspace</button>
+        <span id="action-status">Ready for your next change.</span>
+      </div>
+    </section>
+    <section class="preview-grid">
+      <article><span class="metric">01</span><h2>Inspect</h2><p>Every file stays visible in the Orbit editor.</p></article>
+      <article><span class="metric">02</span><h2>Change</h2><p>Ask the agent for a focused implementation.</p></article>
+      <article><span class="metric">03</span><h2>Verify</h2><p>Run safe checks and inspect the rendered result.</p></article>
+    </section>
+  </main>
+\`;
+
+document.querySelector("#primary-action").addEventListener("click", () => {
+  document.querySelector("#action-status").textContent = "The workspace is live and editable.";
+});
+`,
+  "src/styles.css": `:root {
+  color: #182033;
+  background: #f4f6f8;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.preview-shell { max-width: 980px; margin: 0 auto; padding: 32px clamp(20px, 6vw, 72px) 72px; }
+.preview-nav { display: flex; align-items: center; justify-content: space-between; padding: 8px 0 56px; }
+.preview-nav strong { font-size: 20px; letter-spacing: -0.06em; }
+.preview-pill { border: 1px solid #dce3e8; border-radius: 999px; color: #667085; font-size: 11px; padding: 8px 12px; }
+.preview-hero { border-radius: 28px; background: #182033; color: white; padding: clamp(28px, 7vw, 76px); }
+.eyebrow, .metric { color: #4ad4ad; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+h1 { max-width: 620px; margin: 18px 0; font-size: clamp(42px, 7vw, 84px); letter-spacing: -.075em; line-height: .94; }
+.lede { max-width: 520px; color: #b9c1d0; font-size: 18px; line-height: 1.6; }
+.preview-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 16px; margin-top: 36px; }
+button { border: 0; border-radius: 10px; background: #36c69d; color: #10221f; cursor: pointer; font-weight: 700; padding: 13px 17px; }
+#action-status { color: #8f9bad; font-size: 12px; }
+.preview-grid { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
+.preview-grid article { border: 1px solid #dce3e8; border-radius: 18px; background: white; padding: 22px; }
+.preview-grid h2 { margin: 30px 0 8px; font-size: 19px; letter-spacing: -.04em; }
+.preview-grid p { color: #667085; font-size: 13px; line-height: 1.6; margin: 0; }
+@media (max-width: 680px) { .preview-grid { grid-template-columns: 1fr; } .preview-nav { padding-bottom: 32px; } }
+`,
 };
 
 function languageFor(filePath: string): string | null {
@@ -122,7 +194,7 @@ function languageFor(filePath: string): string | null {
   return null;
 }
 
-function normalizeRelativePath(relativePath: string): string {
+export function normalizeRelativePath(relativePath: string): string {
   const normalized = path.posix.normalize(relativePath.replaceAll("\\", "/"));
   if (
     !relativePath ||
@@ -140,7 +212,7 @@ function absolutePath(relativePath: string): string {
   return path.join(workspaceRoot, normalizeRelativePath(relativePath));
 }
 
-async function ensureWorkspace(): Promise<void> {
+export async function ensureWorkspace(): Promise<void> {
   await fs.mkdir(workspaceRoot, { recursive: true });
   for (const [relativePath, content] of Object.entries(initialFiles)) {
     const target = absolutePath(relativePath);
@@ -209,15 +281,19 @@ export async function applyWorkspaceChanges(
   }
 }
 
+export async function updateWorkspaceFile(
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  await applyWorkspaceChanges([{ path: relativePath, content }]);
+}
+
 function isAllowedCommand(command: string): boolean {
   if (command.length > 240) return false;
   if (/[;&|`$<>]/.test(command)) return false;
-  if (/\b(rm|sudo|curl|wget|chmod|chown|kill|git\s+(push|reset|clean))\b/i.test(command)) {
-    return false;
-  }
-  return /^(pnpm|npm|npx|node|tsc|git)\s+[a-zA-Z0-9@%_+=:./-]+(?:\s+[a-zA-Z0-9@%_+=:./-]+)*$/.test(
-    command.trim(),
-  );
+  const trimmed = command.trim();
+  return /^tsc(?:\s+--(?:noEmit|pretty=false))?$/.test(trimmed)
+    || /^git\s+(?:status|diff(?:\s+--stat)?)$/.test(trimmed);
 }
 
 export async function runSafeCommand(command: string): Promise<string> {
@@ -225,7 +301,8 @@ export async function runSafeCommand(command: string): Promise<string> {
     return `Skipped unsafe command: ${command}`;
   }
   try {
-    const result = await execFileAsync("bash", ["-lc", command], {
+    const [executable, ...args] = command.trim().split(/\s+/);
+    const result = await execFileAsync(executable, args, {
       cwd: workspaceRoot,
       timeout: 45_000,
       maxBuffer: 200_000,

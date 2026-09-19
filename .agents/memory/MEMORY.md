@@ -1,1 +1,2 @@
 - [Groq model availability](groq-model-availability.md) — validate the live model list because access varies by key.
+- [Workspace runtime root](workspace-runtime-root.md) — resolve the persistent project path explicitly from the API package runtime.

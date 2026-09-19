@@ -40,6 +40,12 @@ export interface AgentTaskInput {
   prompt: string;
 }
 
+export interface AgentFileUpdateInput {
+  /** @minLength 1 */
+  path: string;
+  content: string;
+}
+
 export interface AgentChange {
   path: string;
   summary: string;

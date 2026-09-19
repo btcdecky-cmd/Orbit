@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import express, { Router, type IRouter } from "express";
 import {
   GetAgentWorkspaceResponse,
   RunAgentTaskBody,
@@ -8,10 +8,26 @@ import {
   applyWorkspaceChanges,
   getWorkspaceSnapshot,
   runSafeCommand,
+  ensureWorkspace,
+  updateWorkspaceFile,
+  workspaceRoot,
   type WorkspaceChange,
 } from "../lib/workspace";
 
 const router: IRouter = Router();
+
+router.use(
+  "/agent/preview",
+  async (_req, _res, next) => {
+    try {
+      await ensureWorkspace();
+      next();
+    } catch (error) {
+      next(error);
+    }
+  },
+  express.static(workspaceRoot, { index: "index.html" }),
+);
 
 type AgentPlan = {
   message: string;
@@ -59,6 +75,27 @@ router.get("/agent/workspace", async (_req, res): Promise<void> => {
   res.json(GetAgentWorkspaceResponse.parse(workspace));
 });
 
+router.put("/agent/file", async (req, res): Promise<void> => {
+  const pathValue = req.body?.path;
+  const contentValue = req.body?.content;
+  if (
+    typeof pathValue !== "string" ||
+    typeof contentValue !== "string" ||
+    !pathValue.trim()
+  ) {
+    res.status(400).json({ error: "A file path and string content are required." });
+    return;
+  }
+  try {
+    await updateWorkspaceFile(pathValue, contentValue);
+    res.json(GetAgentWorkspaceResponse.parse(await getWorkspaceSnapshot()));
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "The file could not be saved.",
+    });
+  }
+});
+
 router.post("/agent/run", async (req, res): Promise<void> => {
   const parsedBody = RunAgentTaskBody.safeParse(req.body);
   if (!parsedBody.success) {
@@ -87,7 +124,7 @@ Rules:
 - Return complete file contents for every changed file, never patches or ellipses.
 - Paths must be relative to the workspace and must not contain .., leading slashes, or hidden system paths.
 - Prefer editing existing files over adding unnecessary files.
-- Commands are optional and must be safe validation commands only: pnpm, npm, npx, node, tsc, or read-only git status/diff.
+- Commands are optional and must be safe validation commands only: tsc --noEmit, tsc --pretty=false, git status, or git diff --stat.
 - Do not return markdown fences or any text outside the JSON object.
 
 CURRENT WORKSPACE:

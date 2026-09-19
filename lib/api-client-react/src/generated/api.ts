@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentFileUpdateInput,
   AgentTaskInput,
   AgentTaskResult,
   AgentWorkspace,
@@ -128,9 +129,6 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-
-
-
 export const getGetAgentWorkspaceUrl = () => {
 
 
@@ -201,13 +199,6 @@ export function useGetAgentWorkspace<TData = Awaited<ReturnType<typeof getAgentW
 
   return withQueryKey(query, queryOptions.queryKey);
 }
-
-
-
-
-
-
-
 export const getRunAgentTaskUrl = () => {
 
 
@@ -296,3 +287,161 @@ export const useRunAgentTask = <TError = ErrorType<void>,
       return useMutation(getRunAgentTaskMutationOptions(options));
     }
 
+export const getUpdateAgentFileUrl = () => {
+
+
+
+
+  return `/api/agent/file`
+}
+
+/**
+ * @summary Save a file in the active coding workspace
+ */
+export const updateAgentFile = async (agentFileUpdateInput: AgentFileUpdateInput, options?: Parameters<typeof customFetch>[1]): Promise<AgentWorkspace> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AgentWorkspace>(getUpdateAgentFileUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentFileUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateAgentFileMutationKey = () => ['updateAgentFile'] as const;
+
+export const getUpdateAgentFileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentFile>>, TError,UpdateAgentFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAgentFile>>, TError,UpdateAgentFileMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAgentFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAgentFile>>, UpdateAgentFileMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateAgentFile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAgentFileMutationResult = NonNullable<Awaited<ReturnType<typeof updateAgentFile>>>
+    export type UpdateAgentFileMutationBody = BodyType<AgentFileUpdateInput>
+    export type UpdateAgentFileMutationError = ErrorType<void>
+    export type UpdateAgentFileMutationVariables = {data: BodyType<AgentFileUpdateInput>}
+
+    /**
+ * @summary Save a file in the active coding workspace
+ */
+export const useUpdateAgentFile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAgentFile>>, TError,UpdateAgentFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAgentFile>>,
+        TError,
+        UpdateAgentFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAgentFileMutationOptions(options));
+    }
+
+export const getGetAgentPreviewUrl = () => {
+
+
+
+
+  return `/api/agent/preview`
+}
+
+/**
+ * @summary Serve the active workspace preview
+ */
+export const getAgentPreview = async ( options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getGetAgentPreviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentPreviewQueryKey = () => {
+    return [
+    `/api/agent/preview`
+    ] as const;
+    }
+
+
+export const getGetAgentPreviewQueryOptions = <TData = Awaited<ReturnType<typeof getAgentPreview>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentPreviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentPreview>>> = ({ signal }) => getAgentPreview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentPreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentPreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentPreview>>>
+export type GetAgentPreviewQueryError = ErrorType<void>
+
+
+/**
+ * @summary Serve the active workspace preview
+ */
+
+export function useGetAgentPreview<TData = Awaited<ReturnType<typeof getAgentPreview>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentPreviewQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}

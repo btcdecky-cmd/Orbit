@@ -67,3 +67,34 @@ export const RunAgentTaskResponse = zod.object({
 })
 
 
+/**
+ * @summary Save a file in the active coding workspace
+ */
+
+
+
+export const UpdateAgentFileBody = zod.object({
+  "path": zod.string().min(1),
+  "content": zod.string()
+})
+
+export const UpdateAgentFileResponse = zod.object({
+  "projectName": zod.string(),
+  "branch": zod.string(),
+  "status": zod.string(),
+  "files": zod.array(zod.object({
+  "path": zod.string(),
+  "kind": zod.enum(['file', 'folder']),
+  "language": zod.string().nullable(),
+  "size": zod.number().int()
+})),
+  "contents": zod.record(zod.string(), zod.string())
+})
+
+
+/**
+ * @summary Serve the active workspace preview
+ */
+export const GetAgentPreviewResponse = zod.unknown()
+
+

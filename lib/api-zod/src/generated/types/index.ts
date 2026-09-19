@@ -7,6 +7,7 @@
  */
 
 export * from './agentChange';
+export * from './agentFileUpdateInput';
 export * from './agentTaskInput';
 export * from './agentTaskResult';
 export * from './agentWorkspace';
